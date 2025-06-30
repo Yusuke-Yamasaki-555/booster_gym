@@ -1,3 +1,12 @@
+# 調査リポジトリ
+
+コメント追加などをしていくリポジトリ
+
+Booster T1 Manual:
+[https://booster.feishu.cn/wiki/DtFgwVXYxiBT8BksUPjcOwG4n4f](https://booster.feishu.cn/wiki/DtFgwVXYxiBT8BksUPjcOwG4n4f)
+
+---
+
 # Booster Gym
 
 Booster Gym is a reinforcement learning (RL) framework designed for humanoid robot locomotion developed by [Booster Robotics](https://boosterobotics.com/).

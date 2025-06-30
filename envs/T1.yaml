@@ -1,3 +1,6 @@
+# 初期設定、学習設定、環境設定、リセット設定、報酬設定などを定義するYAMLファイル
+# 大抵、このYamlの設定を`./t1.py`で読み込んで適用している
+
 basic:
   checkpoint: null # set to -1 to load last saved model
   headless: false
@@ -86,9 +89,10 @@ init_state:
   rot: [0.0, 0.0, 0.0, 1.0] # x,y,z,w [quat]
   lin_vel: [0.0, 0.0, 0.0]  # x,y,z [m/s]
   ang_vel: [0.0, 0.0, 0.0]  # x,y,z [rad/s]
+  # 明示されている関節以外は、0 [rad]で初期化される
   default_joint_angles: {"Hip_Pitch": -0.2, "Knee_Pitch": 0.4, "Ankle_Pitch": -0.25, "default": 0.} # target angles when action = 0.0
 
-control:
+control:  # 初期化時のパラメータ
   stiffness: {"Hip": 200., "Knee": 200., "Ankle": 50.} # [N*m/rad]
   damping: {"Hip": 5., "Knee": 5., "Ankle": 1.} # [N*m*s/rad]
   action_scale: 1.
@@ -171,7 +175,7 @@ noise:
     distribution: "gaussian"
 
 randomization:
-  init_dof_pos:
+  init_dof_pos:  # リセット時の関節角度のランダム化
     range: [0., 0.05]
     operation: "additive"
     distribution: "gaussian"
