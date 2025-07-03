@@ -1,0 +1,16 @@
+1. isaac labをcloneする
+2. `_isaac_sim`ディレクトリをclone直下に作って、isaac simをそこに入れる。その中のPythonをisaacを読むので、環境構築やリカバがめちゃ楽
+3. assetは、externalのほうが良い。./isaac_lab.sh --newの時。
+  これにすれば、このリンク[https://isaac-sim.github.io/IsaacLab/main/source/setup/walkthrough/project_setup.html](https://isaac-sim.github.io/IsaacLab/main/source/setup/walkthrough/project_setup.html)の形になり、そのcfg.pyを自由に書き換えれば良いようになる。
+4. ~Cfg()関数だけをいじれば良い。その中のObsTerm()関数で観測を取得している。~Term()が重要。randomizationとか、だいたい公式が用意しているのを使えば事足りる。書かなきゃいけないのは、報酬関数とかぐらい。
+5. mdp/reward.pyをいじれば良いように。
+6. 報酬関数で、robot = env.scene[asset_cfg.name]で、ロボットの情報全部が取れる。robot.data.から、めっちゃいろんな情報が取れる。全部のロボット（env=4096とか）の情報全部を持ってるので、３次元の配列になっている。[対象のロボット, ロボットの対象関節, 座標のtag]みたいな。並列のデータ全部が取れるし、並列のロボットの報酬全部を返さなければいけない。なので、[:, j_id, 0]みたいに、全エージェントに対してやる必要がある。
+7. train.py実行時に、env.reward. とかで、実行時のコマンドで報酬やrandomizationなどを変更することができる。コードを変更する必要がない。
+  ~TrainEnvCfg()関数がenvという名前でインスタンス化されている。ので、n7のこれができる。~に当てはまるのは、ロボットの名前。
+
+いじるのは、RewardCfg()と、rewards.pyと、PolicyCfg()の観測ぐらい。
+
+
+Isaac labのドキュメントを参考にしよう
+先輩のリポジトリを参考にしよう
+
