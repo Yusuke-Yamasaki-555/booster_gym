@@ -21,53 +21,55 @@ class Policy:
         self.stiffness = np.array(self.cfg["common"]["stiffness"], dtype=np.float32)
         self.damping = np.array(self.cfg["common"]["damping"], dtype=np.float32)
 
-        self.commands = np.zeros(3, dtype=np.float32)
-        self.smoothed_commands = np.zeros(3, dtype=np.float32)
-
-        self.gait_frequency = self.cfg["policy"]["gait_frequency"]
-        self.gait_process = 0.0
-        self.dof_targets = np.copy(self.default_dof_pos)
-        self.obs = np.zeros(self.cfg["policy"]["num_observations"], dtype=np.float32)
-        self.actions = np.zeros(self.cfg["policy"]["num_actions"], dtype=np.float32)
+        # 99次元に修正
+        self.obs = np.zeros(99, dtype=np.float32)
+        self.actions = np.zeros(21, dtype=np.float32)
+        self.last_action = np.zeros(21, dtype=np.float32)
         self.policy_interval = self.cfg["common"]["dt"] * self.cfg["policy"]["control"]["decimation"]
+        self.dof_targets = np.copy(self.default_dof_pos)
 
-    def inference(self, time_now, dof_pos, dof_vel, base_ang_vel, projected_gravity, vx, vy, vyaw):
-        self.gait_process = np.fmod(time_now * self.gait_frequency, 1.0)
-        self.commands[0] = vx
-        self.commands[1] = vy
-        self.commands[2] = vyaw
-        clip_range = (-self.policy_interval, self.policy_interval)
-        self.smoothed_commands += np.clip(self.commands - self.smoothed_commands, *clip_range)
+    def inference(
+        self, time_now, dof_pos, dof_vel, imu_orientation, imu_ang_vel, target_pos_obs
+    ):
+        # 必要な正規化係数はcfgから取得（なければ1.0でOK）
+        norm = self.cfg["policy"].get("normalization", {})
+        get_norm = lambda k, default=1.0: norm.get(k, default)
 
-        if np.linalg.norm(self.smoothed_commands) < 1e-5:
-            self.gait_frequency = 0.0
-        else:
-            self.gait_frequency = self.cfg["policy"]["gait_frequency"]
+        idx = 0
+        # 0: target_pos_obs (4,)
+        self.obs[idx:idx+4] = target_pos_obs * get_norm("target_pos_obs", 1.0)
+        idx += 4
+        # 1: joint_pos_rel (23,)
+        self.obs[idx:idx+23] = (dof_pos - self.default_dof_pos)[:23] * get_norm("dof_pos", 1.0)
+        idx += 23
+        # 2: joint_vel_rel (23,)
+        self.obs[idx:idx+23] = dof_vel[:23] * get_norm("dof_vel", 1.0)
+        idx += 23
+        # 3: imu_orientation (4,)
+        self.obs[idx:idx+4] = imu_orientation * get_norm("imu_orientation", 1.0)
+        idx += 4
+        # 4: imu_angular_velocity (3,)
+        self.obs[idx:idx+3] = imu_ang_vel * get_norm("ang_vel", 1.0)
+        idx += 3
+        # 5: actions (21,)
+        self.obs[idx:idx+21] = self.actions
+        idx += 21
+        # 6: last_action (21,)
+        self.obs[idx:idx+21] = self.last_action
+        idx += 21
 
-        self.obs[0:3] = projected_gravity * self.cfg["policy"]["normalization"]["gravity"]
-        self.obs[3:6] = base_ang_vel * self.cfg["policy"]["normalization"]["ang_vel"]
-        self.obs[6] = (
-            self.smoothed_commands[0] * self.cfg["policy"]["normalization"]["lin_vel"] * (self.gait_frequency > 1.0e-8)
+        # 推論
+        input_tensor = torch.from_numpy(self.obs).unsqueeze(0).float()
+        out_actions = self.policy(input_tensor).detach().numpy().squeeze()
+        out_actions = np.clip(
+            out_actions,
+            -get_norm("clip_actions", 1.0),
+            get_norm("clip_actions", 1.0),
         )
-        self.obs[7] = (
-            self.smoothed_commands[1] * self.cfg["policy"]["normalization"]["lin_vel"] * (self.gait_frequency > 1.0e-8)
-        )
-        self.obs[8] = (
-            self.smoothed_commands[2] * self.cfg["policy"]["normalization"]["ang_vel"] * (self.gait_frequency > 1.0e-8)
-        )
-        self.obs[9] = np.cos(2 * np.pi * self.gait_process) * (self.gait_frequency > 1.0e-8)
-        self.obs[10] = np.sin(2 * np.pi * self.gait_process) * (self.gait_frequency > 1.0e-8)
-        self.obs[11:23] = (dof_pos - self.default_dof_pos)[11:] * self.cfg["policy"]["normalization"]["dof_pos"]
-        self.obs[23:35] = dof_vel[11:] * self.cfg["policy"]["normalization"]["dof_vel"]
-        self.obs[35:47] = self.actions
+        self.last_action[:] = self.actions
+        self.actions[:] = out_actions
 
-        self.actions[:] = self.policy(torch.from_numpy(self.obs).unsqueeze(0)).detach().numpy()
-        self.actions[:] = np.clip(
-            self.actions,
-            -self.cfg["policy"]["normalization"]["clip_actions"],
-            self.cfg["policy"]["normalization"]["clip_actions"],
-        )
-        self.dof_targets[:] = self.default_dof_pos
-        self.dof_targets[11:] += self.cfg["policy"]["control"]["action_scale"] * self.actions
+        # dof_targetsのうち制御対象の21自由度だけ更新（必要に応じて調整）
+        self.dof_targets[:21] = self.default_dof_pos[:21] + self.cfg["policy"]["control"]["action_scale"] * self.actions
 
         return self.dof_targets

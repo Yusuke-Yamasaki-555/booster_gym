@@ -214,25 +214,16 @@ if __name__ == "__main__":
     parser.add_argument("--agent_yaml", required=True, type=str, help="Path to agent.yaml.")
     parser.add_argument("--model", required=True, type=str, help="Path to trained policy model (policy.pt).")
     parser.add_argument("--net", type=str, default="127.0.0.1", help="Network interface for SDK communication.")
-    parser.add_argument("--robot_yaml", type=str, help="Path to robot(T1).yaml")  # 追加
     args = parser.parse_args()
 
     # 設定ファイルの読み込み
     with open(args.env_yaml, "r", encoding="utf-8") as f:
-        env_cfg = yaml.load(f, Loader=yaml.UnsafeLoader)
+        env_cfg = yaml.safe_load(f)
     with open(args.agent_yaml, "r", encoding="utf-8") as f:
-        agent_cfg = yaml.load(f, Loader=yaml.UnsafeLoader)
-
-    if args.robot_yaml:
-        with open(args.robot_yaml, "r", encoding="utf-8") as f:
-            robot_cfg = yaml.load(f, Loader=yaml.UnsafeLoader)
-        # robot_cfg優先でマージ
-        merged_cfg = {**agent_cfg, **env_cfg, **robot_cfg}
-    else:
-        merged_cfg = {**agent_cfg, **env_cfg}
+        agent_cfg = yaml.safe_load(f)
 
     # マージ（env_cfg優先、重複キーはenv_cfgが勝つ）
-    # merged_cfg = {**agent_cfg, **env_cfg}
+    merged_cfg = {**agent_cfg, **env_cfg}
     # policy_pathをセット
     if "policy" not in merged_cfg:
         merged_cfg["policy"] = {}

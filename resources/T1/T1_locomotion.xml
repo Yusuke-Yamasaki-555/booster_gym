@@ -120,18 +120,18 @@
         </body>
     </worldbody>
     <actuator>
-        <motor name="Left_Hip_Pitch" joint="Left_Hip_Pitch" ctrlrange="-45.0 45.0" ctrllimited="true" />
-        <motor name="Left_Hip_Roll" joint="Left_Hip_Roll" ctrlrange="-45.0 45.0" ctrllimited="true" />
-        <motor name="Left_Hip_Yaw" joint="Left_Hip_Yaw" ctrlrange="-30.0 30.0" ctrllimited="true" />
-        <motor name="Left_Knee_Pitch" joint="Left_Knee_Pitch" ctrlrange="-65.0 65.0" ctrllimited="true" />
-        <motor name="Left_Ankle_Pitch" joint="Left_Ankle_Pitch" ctrlrange="-24.0 24.0" ctrllimited="true" />
-        <motor name="Left_Ankle_Roll" joint="Left_Ankle_Roll" ctrlrange="-15.0 15.0" ctrllimited="true" />
-        <motor name="Right_Hip_Pitch" joint="Right_Hip_Pitch" ctrlrange="-45.0 45.0" ctrllimited="true" />
-        <motor name="Right_Hip_Roll" joint="Right_Hip_Roll" ctrlrange="-45.0 45.0" ctrllimited="true" />
-        <motor name="Right_Hip_Yaw" joint="Right_Hip_Yaw" ctrlrange="-30.0 30.0" ctrllimited="true" />
-        <motor name="Right_Knee_Pitch" joint="Right_Knee_Pitch" ctrlrange="-65.0 65.0" ctrllimited="true" />
-        <motor name="Right_Ankle_Pitch" joint="Right_Ankle_Pitch" ctrlrange="-24.0 24.0" ctrllimited="true" />
-        <motor name="Right_Ankle_Roll" joint="Right_Ankle_Roll" ctrlrange="-15.0 15.0" ctrllimited="true" />
+        <position name="Left_Hip_Pitch" joint="Left_Hip_Pitch" kp="350" kv="7.5"/>
+        <position name="Left_Hip_Roll" joint="Left_Hip_Roll" kp="350" kv="7.5"/>
+        <position name="Left_Hip_Yaw" joint="Left_Hip_Yaw" kp="180" kv="3.0"/>
+        <position name="Left_Knee_Pitch" joint="Left_Knee_Pitch" kp="350" kv="5.5"/>
+        <position name="Left_Ankle_Pitch" joint="Left_Ankle_Pitch" kp="450" kv="0.5"/>
+        <position name="Left_Ankle_Roll" joint="Left_Ankle_Roll" kp="450" kv="0.5"/>
+        <position name="Right_Hip_Pitch" joint="Right_Hip_Pitch" kp="350" kv="7.5"/>
+        <position name="Right_Hip_Roll" joint="Right_Hip_Roll" kp="350" kv="7.5"/>
+        <position name="Right_Hip_Yaw" joint="Right_Hip_Yaw" kp="180" kv="3.0"/>
+        <position name="Right_Knee_Pitch" joint="Right_Knee_Pitch" kp="350" kv="5.5"/>
+        <position name="Right_Ankle_Pitch" joint="Right_Ankle_Pitch" kp="450" kv="0.5"/>
+        <position name="Right_Ankle_Roll" joint="Right_Ankle_Roll" kp="450" kv="0.5"/>
     </actuator>
     <sensor>
         <framequat name="orientation" objtype="site" noise="0.001" objname="imu" />

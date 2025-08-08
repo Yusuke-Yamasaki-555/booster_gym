@@ -1,0 +1,8 @@
+gnuplot plot_cmd_q_log.plt
+gnuplot plot_obs_action.plt
+gnuplot plot_obs_base.plt
+gnuplot plot_obs_controller_cmd.plt
+gnuplot plot_obs_dof_pos.plt
+gnuplot plot_obs_dof_vel.plt
+gnuplot plot_obs_gait_freq.plt
+gnuplot plot_obs_projected_grav.plt

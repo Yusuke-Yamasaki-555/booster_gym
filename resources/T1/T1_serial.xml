@@ -181,6 +181,8 @@
     </body>
   </worldbody>
 
+  <!--position servo actuator: https://mujoco.readthedocs.io/en/stable/XMLreference.html#actuator-position-->
+  <!--direct-drive actuator: https://mujoco.readthedocs.io/en/stable/XMLreference.html#actuator-motor-->
   <actuator>
     <motor name="AAHead_yaw" joint="AAHead_yaw" ctrllimited="true" ctrlrange="-7 7" gear="1" />
     <motor name="Head_pitch" joint="Head_pitch" ctrllimited="true" ctrlrange="-7 7" gear="1" />

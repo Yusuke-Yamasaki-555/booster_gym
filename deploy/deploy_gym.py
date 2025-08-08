@@ -19,17 +19,28 @@ from utils.command import create_prepare_cmd, create_first_frame_rl_cmd
 from utils.remote_control_service import RemoteControlService
 from utils.rotate import rotate_vector_inverse_rpy
 from utils.timer import TimerConfig, Timer
-from utils.policy import Policy
+from utils.policy_gym import Policy
 
+
+cmd_q_log = []
+obs_time_log = []
+obs_dof_pos_leg_log = []
+obs_dof_vel_leg_log = []
+obs_base_ang_vel_log = []
+obs_projected_gravity_log = []
+obs_controller_cmd_log = []
+obs_gait_freq_log = []
+obs_action_log = []
 
 class Controller:
-    def __init__(self, cfg) -> None:  # cfg_file → cfg(dict)に変更
+    def __init__(self, cfg_file) -> None:
         # Setup logging
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(__name__)
 
         # Load config
-        self.cfg = cfg
+        with open(cfg_file, "r", encoding="utf-8") as f:
+            self.cfg = yaml.load(f.read(), Loader=yaml.FullLoader)
 
         # Initialize components
         self.remoteControlService = RemoteControlService()
@@ -42,6 +53,12 @@ class Controller:
         self.running = True
 
         self.publish_lock = threading.Lock()
+
+        self.count_step = 0
+        # self.cmd_log_1 = []
+        # self.cmd_log_2 = []
+        # self.cmd_log_3 = []
+        self.obs_log = []
 
     def _init_timer(self):
         self.timer = Timer(TimerConfig(time_step=self.cfg["common"]["dt"]))
@@ -72,6 +89,7 @@ class Controller:
             self.logger.error(f"Failed to initialize communication: {e}")
             raise
 
+    # 観測に使っているフィードバックデータを受け取る関数
     def _low_state_handler(self, low_state_msg: LowState):
         if abs(low_state_msg.imu_state.rpy[0]) > 1.0 or abs(low_state_msg.imu_state.rpy[1]) > 1.0:
             self.logger.warning("IMU base rpy values are too large: {}".format(low_state_msg.imu_state.rpy))
@@ -93,7 +111,12 @@ class Controller:
                 self.dof_vel[i] = motor.dq
 
     def _send_cmd(self, cmd: LowCmd):
+        global cmd_q_log
         self.low_cmd_publisher.Write(cmd)
+        input_data = cmd.motor_cmd[11:]  # Only take the last 12 motors
+        list_cmd_q = [motor_cmd.q for motor_cmd in input_data]
+        cmd_q_log.append(list_cmd_q)
+        # input_data[0].q, input_data[0].kp, input_data[0].kd
 
     def cleanup(self) -> None:
         """Cleanup resources."""
@@ -139,6 +162,8 @@ class Controller:
         print(f"{self.remoteControlService.get_operation_hint()}")
 
     def run(self):
+        global obs_dof_pos_leg_log, obs_dof_vel_leg_log, obs_base_ang_vel_log, obs_projected_gravity_log, obs_controller_cmd_log, obs_gait_freq_log
+
         time_now = self.timer.get_time()
         if time_now < self.next_inference_time:
             time.sleep(0.001)
@@ -148,7 +173,7 @@ class Controller:
         self.logger.debug(f"Next start time: {self.next_inference_time}")
         start_time = time.perf_counter()
 
-        self.dof_target[:] = self.policy.inference(
+        self.dof_target[:], self.obs_log[:] = self.policy.inference(
             time_now=time_now,
             dof_pos=self.dof_pos,
             dof_vel=self.dof_vel,
@@ -159,6 +184,19 @@ class Controller:
             vyaw=self.remoteControlService.get_vyaw_cmd(),
         )
 
+        # obs_time_log.append(time_now)
+        obs_projected_gravity_log.append(self.obs_log.copy()[0:3])
+        obs_base_ang_vel_log.append(self.obs_log.copy()[3:6])
+        obs_controller_cmd_log.append([self.obs_log.copy()[6],
+                                       self.obs_log.copy()[7],
+                                       self.obs_log.copy()[8]])
+        obs_gait_freq_log.append([self.obs_log.copy()[9],
+                              self.obs_log.copy()[10]])
+        obs_dof_pos_leg_log.append(self.obs_log.copy()[11:23])
+        obs_dof_vel_leg_log.append(self.obs_log.copy()[23:35])
+        obs_action_log.append(self.obs_log.copy()[35:47])
+        
+        
         inference_time = time.perf_counter()
         self.logger.debug(f"Inference took {(inference_time - start_time)*1000:.4f} ms")
         time.sleep(0.001)
@@ -172,16 +210,23 @@ class Controller:
             self.next_publish_time += self.cfg["common"]["dt"]
             self.logger.debug(f"Next publish time: {self.next_publish_time}")
 
+            # 前の制御入力（各関節角度） * 0.8 + 今回の目標角度値 * 0.2で、今回の制御入力を計算している
+                # 変化量を抑えるため？
             self.filtered_dof_target = self.filtered_dof_target * 0.8 + self.dof_target * 0.2
 
-            for i in range(B1JointCnt):
+            for i in range(B1JointCnt):  # 足首以外は位置制御っぽい
                 self.low_cmd.motor_cmd[i].q = self.filtered_dof_target[i]
 
             # Use series-parallel conversion for torque to avoid non-linearity
+            # 足首関節だけに適用。足首だけトルク制御になっているっぽい
             for i in self.cfg["mech"]["parallel_mech_indexes"]:
-                self.low_cmd.motor_cmd[i].q = self.filtered_dof_target[i]  # 目標位置をセット
-                self.low_cmd.motor_cmd[i].kp = self.cfg["common"].get("position_gain", [20.0]*B1JointCnt)[i]  # 位置ゲイン（例: 20.0）
-                self.low_cmd.motor_cmd[i].tau = 0.0  # トルク指令は0
+                self.low_cmd.motor_cmd[i].q = self.dof_pos_latest[i]
+                self.low_cmd.motor_cmd[i].tau = np.clip(
+                    (self.filtered_dof_target[i] - self.dof_pos_latest[i]) * self.cfg["common"]["stiffness"][i],
+                    -self.cfg["common"]["torque_limit"][i],
+                    self.cfg["common"]["torque_limit"][i],
+                )
+                self.low_cmd.motor_cmd[i].kp = 0.0
 
             start_time = time.perf_counter()
             self._send_cmd(self.low_cmd)
@@ -201,48 +246,61 @@ if __name__ == "__main__":
     import signal
     import sys
     import os
-    import yaml
+
+    def logging():
+        global cmd_q_log, obs_dof_pos_leg_log, obs_dof_vel_leg_log, obs_base_ang_vel_log, obs_projected_gravity_log, obs_controller_cmd_log, obs_gait_freq_log, obs_action_log
+        print("\noutput logging...")
+        with open("cmd_q_log.dat", "w") as f:
+            for cmd_list in cmd_q_log:
+                f.write("   ".join(map(str, cmd_list)) + "\n")
+        # with open("obs_time_log.dat", "w") as f:
+        #     for time_value in obs_time_log:
+        #         f.write(f"{time_value}\n")
+        with open("obs_dof_pos_leg_log.dat", "w") as f:
+            for pos_list in obs_dof_pos_leg_log:
+                f.write("   ".join(map(str, pos_list)) + "\n")
+        with open("obs_dof_vel_leg_log.dat", "w") as f:
+            for vel_list in obs_dof_vel_leg_log:
+                f.write("   ".join(map(str, vel_list)) + "\n")
+        with open("obs_base_ang_vel_log.dat", "w") as f:
+            for ang_vel in obs_base_ang_vel_log:
+                f.write("   ".join(map(str, ang_vel)) + "\n")
+        with open("obs_projected_gravity_log.dat", "w") as f:
+            for gravity in obs_projected_gravity_log:
+                f.write("   ".join(map(str, gravity)) + "\n")
+        with open("obs_controller_cmd_log.dat", "w") as f:
+            for cmd in obs_controller_cmd_log:
+                f.write("   ".join(map(str, cmd)) + "\n")
+        with open("obs_gait_freq_log.dat", "w") as f:
+            for gait_freq in obs_gait_freq_log:
+                f.write("   ".join(map(str, gait_freq)) + "\n")
+        with open("obs_action_log.dat", "w") as f:
+            for action in obs_action_log:
+                f.write("   ".join(map(str, action)) + "\n")
+        print("Logging complete.")
+        print("Exiting gracefully...")
 
     def signal_handler(sig, frame):
+
+        logging()
+
         print("\nShutting down...")
+
         sys.exit(0)
 
     signal.signal(signal.SIGINT, signal_handler)
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env_yaml", required=True, type=str, help="Path to env.yaml.")
-    parser.add_argument("--agent_yaml", required=True, type=str, help="Path to agent.yaml.")
-    parser.add_argument("--model", required=True, type=str, help="Path to trained policy model (policy.pt).")
+    parser.add_argument("--config", required=True, type=str, help="Name of the configuration file.")
     parser.add_argument("--net", type=str, default="127.0.0.1", help="Network interface for SDK communication.")
-    parser.add_argument("--robot_yaml", type=str, help="Path to robot(T1).yaml")  # 追加
     args = parser.parse_args()
-
-    # 設定ファイルの読み込み
-    with open(args.env_yaml, "r", encoding="utf-8") as f:
-        env_cfg = yaml.load(f, Loader=yaml.UnsafeLoader)
-    with open(args.agent_yaml, "r", encoding="utf-8") as f:
-        agent_cfg = yaml.load(f, Loader=yaml.UnsafeLoader)
-
-    if args.robot_yaml:
-        with open(args.robot_yaml, "r", encoding="utf-8") as f:
-            robot_cfg = yaml.load(f, Loader=yaml.UnsafeLoader)
-        # robot_cfg優先でマージ
-        merged_cfg = {**agent_cfg, **env_cfg, **robot_cfg}
-    else:
-        merged_cfg = {**agent_cfg, **env_cfg}
-
-    # マージ（env_cfg優先、重複キーはenv_cfgが勝つ）
-    # merged_cfg = {**agent_cfg, **env_cfg}
-    # policy_pathをセット
-    if "policy" not in merged_cfg:
-        merged_cfg["policy"] = {}
-    merged_cfg["policy"]["policy_path"] = args.model
+    cfg_file = os.path.join("configs", args.config)
 
     print(f"Starting custom controller, connecting to {args.net} ...")
     ChannelFactory.Instance().Init(0, args.net)
 
-    with Controller(merged_cfg) as controller:
-        time.sleep(2)
+    with Controller(cfg_file) as controller:
+        time.sleep(2)  # Wait for channels to initialize
         print("Initialization complete.")
         controller.start_custom_mode_conditionally()
         controller.start_rl_gait_conditionally()
@@ -251,6 +309,8 @@ if __name__ == "__main__":
             while controller.running:
                 controller.run()
             controller.client.ChangeMode(RobotMode.kDamping)
+            logging()
+            print("\n Controller stopped. Switching to damping mode. Shutdown...")
         except KeyboardInterrupt:
             print("\nKeyboard interrupt received. Cleaning up...")
             controller.cleanup()

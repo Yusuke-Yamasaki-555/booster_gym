@@ -1,3 +1,9 @@
+""" Additional required settings
+- condaでopenglを使うために必要なもの
+- this: https://docs.pytorch.org/rl/0.4/reference/generated/knowledge_base/MUJOCO_INSTALLATION.html
+- mesa, glfwの環境を作る必要がある
+"""
+
 import os
 import sys
 import glob
@@ -118,11 +124,13 @@ if __name__ == "__main__":
                 actions[:] = dist.loc.detach().numpy()
                 actions[:] = np.clip(actions, -cfg["normalization"]["clip_actions"], cfg["normalization"]["clip_actions"])
                 dof_targets[:] = default_dof_pos + cfg["control"]["action_scale"] * actions
-            mj_data.ctrl = np.clip(
-                dof_stiffness * (dof_targets - dof_pos) - dof_damping * dof_vel,
-                mj_model.actuator_ctrlrange[:, 0],
-                mj_model.actuator_ctrlrange[:, 1],
-            )
+            # mj_data.ctrl = np.clip(
+            #     dof_stiffness * (dof_targets - dof_pos) - dof_damping * dof_vel,
+            #     mj_model.actuator_ctrlrange[:, 0],
+            #     mj_model.actuator_ctrlrange[:, 1],
+            # )  # ここで制御入力を入れる
+            mj_data.ctrl = dof_targets
+            print(f"target_pos: {dof_targets}")
             mujoco.mj_step(mj_model, mj_data)
             viewer.cam.lookat[:] = mj_data.qpos.astype(np.float32)[0:3]
             viewer.sync()
