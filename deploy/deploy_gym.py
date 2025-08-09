@@ -247,7 +247,8 @@ if __name__ == "__main__":
     import sys
     import os
 
-    def logging():
+
+    def logging_dat():
         global cmd_q_log, obs_dof_pos_leg_log, obs_dof_vel_leg_log, obs_base_ang_vel_log, obs_projected_gravity_log, obs_controller_cmd_log, obs_gait_freq_log, obs_action_log
         print("\noutput logging...")
         with open("cmd_q_log.dat", "w") as f:
@@ -280,13 +281,13 @@ if __name__ == "__main__":
         print("Logging complete.")
         print("Exiting gracefully...")
 
+
     def signal_handler(sig, frame):
 
-        logging()
-
+        logging_dat()
         print("\nShutting down...")
-
         sys.exit(0)
+
 
     signal.signal(signal.SIGINT, signal_handler)
 
@@ -309,7 +310,7 @@ if __name__ == "__main__":
             while controller.running:
                 controller.run()
             controller.client.ChangeMode(RobotMode.kDamping)
-            logging()
+            logging_dat()
             print("\n Controller stopped. Switching to damping mode. Shutdown...")
         except KeyboardInterrupt:
             print("\nKeyboard interrupt received. Cleaning up...")
